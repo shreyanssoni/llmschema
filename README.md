@@ -1,5 +1,7 @@
 # llmschema
 
+[![PyPI](https://img.shields.io/pypi/v/llmschema)](https://pypi.org/project/llmschema/)
+
 `llmschema` is a Python library that ensures structured and validated responses from LLMs (Large Language Models) like Ollama, OpenAI, and Gemini by enforcing user-defined **Pydantic schemas**. It abstracts model-specific quirks and guarantees responses in a **safe, predictable, and JSON-compliant format**.
 
 ## 🚀 Features
