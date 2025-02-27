@@ -26,8 +26,8 @@ import pytest
 
 # API keys (ensure you securely load them in real applications)
 API_KEYS = {
-    "deepseek": "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",
-    "gemini": "AIzaSyCNyCbMNNsrfVFEmv5fMOonqR57GKQOaPs"
+    "deepseek": "sk-or-",
+    "gemini": "AI"
 }
 
 # Model mapping for providers
