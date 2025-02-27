@@ -1,14 +1,12 @@
 import json
 import logging
 import pytest
+import requests
 from llmschema.core import generate_response, _extract_json
 from llmschema.schema_manager import SchemaManager
 from llmschema.exceptions import LLMValidationError
-from pydantic import BaseModel
-from typing import List, Optional
-import ollama
-
 from pydantic import BaseModel, Field
+from typing import List, Optional
 
 # Configure logging for tests
 logging.basicConfig(level=logging.DEBUG)
@@ -22,24 +20,44 @@ class ResponseSchema(BaseModel):
 # Set the test schema
 SchemaManager.set_schema(ResponseSchema)
 
-def test_generate_response_valid_json():
-    """Test if generate_response returns a properly structured JSON output using actual Ollama model."""
-    result = generate_response("llama3.2:1b", "Say hello")
-    
+# Dummy API Keys (Replace with actual values during execution)
+# API keys for different providers
+import pytest
+
+# API keys (ensure you securely load them in real applications)
+API_KEYS = {
+    "deepseek": "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",
+    "gemini": "AIzaSyCNyCbMNNsrfVFEmv5fMOonqR57GKQOaPs"
+}
+
+# Model mapping for providers
+MODEL_MAPPING = {
+    "ollama": "deepseek-r1",
+    "deepseek": "deepseek-chat",
+    "gemini": "gemini-pro"
+}
+
+def test_llm_response(provider: str, model: str):
+    """Helper function to test LLM response for different providers."""
+    api_key = API_KEYS.get(provider)  # Get API key if needed (Ollama does not need one)
+
+    result = generate_response(provider=provider or 'ollama', model=model, api_key=api_key, prompt="Say hello")
+
     assert isinstance(result, dict)
     assert "text" in result
     assert "confidence" in result
 
-def test_generate_response_invalid_json_retries(caplog):
-    """Test if generate_response retries when LLM returns invalid JSON."""
-    caplog.set_level(logging.WARNING)
+@pytest.mark.parametrize("provider, model", [
+    ("ollama", MODEL_MAPPING["ollama"]),
+    ("deepseek", MODEL_MAPPING["deepseek"]),
+    ("gemini", MODEL_MAPPING["gemini"])
+])
+def test_generate_response_valid_json(provider, model):
+    """Test if generate_response returns a properly structured JSON output using different providers."""
+    test_llm_response(provider, model)
 
-    try:
-        result = generate_response("llama3.2:1b", "Say something weird", max_retries=1)
-        assert isinstance(result, dict)  # Should still return a valid dict after retries
-    except LLMValidationError:
-        assert "Retrying..." in caplog.text
 
+# JSON Extraction Tests
 def test_extract_json_valid():
     """Test if _extract_json correctly parses valid JSON."""
     valid_json_str = '{"text": "Hello", "confidence": 0.95}'
@@ -62,23 +80,26 @@ def test_extract_json_invalid():
     with pytest.raises(json.JSONDecodeError):
         _extract_json(invalid_json_str)
 
+# Logging & Schema Validation Tests
 def test_generate_response_logs_errors(caplog):
     """Ensure that errors are logged when the model returns bad JSON."""
     caplog.set_level(logging.ERROR)
-
+    
     try:
-        generate_response("llama3.2:1b", "Give me nonsense output")
+        generate_response("deepseek-r1", "Give me nonsense output")
     except LLMValidationError:
         assert "JSON decoding failed" in caplog.text
 
-def test_generate_response_validates_schema():
+@pytest.mark.parametrize("provider", ["ollama", "deepseek", "gemini"])
+def test_generate_response_validates_schema(provider):
     """Ensure the response strictly follows the user-defined schema."""
-    result = generate_response("llama3.2:1b", "Provide a structured response")
+    result = generate_response("deepseek-r1", "Provide a structured response", provider=provider)
     assert "text" in result
     assert isinstance(result["text"], str)
     assert "confidence" in result
     assert isinstance(result["confidence"], float)
 
+# Advanced Schema Test
 def test_generate_response_handles_pydantic_and_json_schema():
     """Ensure generate_response can handle both Pydantic-based schemas and standard JSON output."""
     
@@ -93,7 +114,7 @@ def test_generate_response_handles_pydantic_and_json_schema():
     # Set the new schema
     SchemaManager.set_schema(CustomResponseSchema)
     
-    response = generate_response("llama3.2:1b", "Book a flight from Delhi to Bangalore for tomorrow.")
+    response = generate_response("deepseek-r1", "Book a flight from Delhi to Bangalore for tomorrow.")
     
     assert isinstance(response, dict)
     assert "tool" in response

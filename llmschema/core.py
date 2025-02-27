@@ -1,9 +1,9 @@
 import json
 import logging
-import ollama
 import re
 from .schema_manager import SchemaManager
 from .exceptions import LLMValidationError
+from .llm_client import LLMClient
 from pydantic import BaseModel
 from typing import Optional, get_origin, get_args, Union
 
@@ -31,7 +31,7 @@ def generate_structured_prompt(schema, user_prompt):
         field_type = details.get("type", "unknown")
         is_required = key in required_fields
         
-        formatted_schema[key] = f"Give value for this. It's description: {field_description}, required: {is_required}. Strictly follow this type: {field_type}" 
+        formatted_schema[key] = f"Give value for this. It's description: {field_description}, required: {is_required}. Strictly follow this type: {field_type}"
         
     structured_prompt = f"""
     You are an AI assistant. Your task is to generate a response in **valid JSON format** that strictly follows the given schema.
@@ -43,20 +43,20 @@ def generate_structured_prompt(schema, user_prompt):
     """.strip()
     return structured_prompt
 
-def generate_response(model: str, prompt: str, max_retries: int = 2):
+def generate_response(provider: str, model: str, api_key: Optional[str], prompt: str, max_retries: int = 2):
     """
-    Generates a structured response from an Ollama model while ensuring it follows the user-defined schema.
+    Generates a structured response from the selected LLM provider while ensuring schema compliance.
     """
     schema = SchemaManager.get_schema()
     structured_prompt = generate_structured_prompt(schema, prompt)
+    llm_client = LLMClient(provider=provider, model=model, api_key=api_key)
     
     for attempt in range(max_retries):
-        logger.info(f"Attempt {attempt+1}: Sending request to Ollama model '{model}'")
+        logger.info(f"Attempt {attempt+1}: Sending request to {provider} model '{model}'")
         
         try:
-            response = ollama.chat(model=model, messages=[{"role": "user", "content": structured_prompt}])
-            response_text = response["message"]["content"]                
-            response_json = _extract_json(response_text)
+            response = llm_client.get_response(structured_prompt)
+            response_json = _extract_json(response)
             validated_response = validate_response(response_json, schema)
             logger.info("Response successfully validated.")
             return validated_response
@@ -76,11 +76,14 @@ def generate_response(model: str, prompt: str, max_retries: int = 2):
 def _extract_json(response_text: str) -> dict:
     """Extracts valid JSON from a response text, handling common LLM quirks."""
     try:
-        response_text = response_text.strip()
-        match = re.search(r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL)
-        if match:
-            response_text = match.group(1)
-        return json.loads(response_text)
+        if isinstance(response_text, str):
+            response_text = response_text.strip()
+            match = re.search(r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL)
+            if match:
+                response_text = match.group(1)
+            return json.loads(response_text)
+        else:
+            return response_text
     except json.JSONDecodeError as e:
         logger.error(f"JSON decoding failed: {e}")
         raise
